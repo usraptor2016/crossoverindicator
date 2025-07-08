@@ -43,9 +43,9 @@ app = Flask(__name__)
 
 def fetch_stock_data(ticker):
     """Fetch stock data from Polygon.io API using SMA endpoint."""
-    # Use the most recent trading day
-    end_date = datetime(2023, 7, 21)  # Recent Friday
-    start_date = end_date - timedelta(days=30)
+    # Use today's date since it's a trading day
+    end_date = datetime(2025, 7, 8)  # Current system date
+    start_date = end_date - timedelta(days=5)  # Reduced from 30 to 5 days
     
     logging.info(f"Using date range: {start_date.date()} to {end_date.date()}")
     
@@ -211,9 +211,9 @@ def scan_stocks():
         
         print(f"Found {len(ticker_results)} data points for {ticker}")
     
-    # Sort results by timestamp in descending order and limit to 100
-    all_results.sort(key=lambda x: x['timestamp'], reverse=True)
-    return all_results[:100]
+    # Sort results by timestamp in descending order and limit to 20 most recent entries
+    all_results.sort(key=lambda x: x['date'], reverse=True)
+    return all_results[:20]  # Reduced from 100 to 20 entries
 
 @app.route('/')
 def home():

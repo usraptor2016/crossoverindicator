@@ -1,6 +1,6 @@
 from polygon import RESTClient
 import pandas as pd
-from flask import Flask, jsonify
+from flask import Flask, jsonify, request
 from flask.templating import render_template_string
 import time
 from datetime import datetime, timedelta, timezone
@@ -36,11 +36,35 @@ except Exception as e:
 
 app = Flask(__name__)
 
+def get_most_recent_trading_day():
+    """Get the most recent trading day using Polygon.io API."""
+    today = datetime.now(pytz.timezone('US/Eastern'))
+    
+    # Try up to 5 previous days to find the most recent trading day
+    for i in range(5):
+        test_date = today - timedelta(days=i)
+        # Format date as YYYY-MM-DD
+        date_str = test_date.strftime('%Y-%m-%d')
+        
+        try:
+            # Try to get market status for this date
+            market_data = client.get_aggs('AAPL', date_str, date_str, 1, 'day')
+            if market_data:
+                logger.info(f'Most recent trading day found: {date_str}')
+                return test_date
+        except Exception as e:
+            logger.debug(f'Not a trading day: {date_str}, error: {str(e)}')
+            continue
+    
+    # If no trading day found in last 5 days, use today's date
+    logger.warning('No recent trading day found, using current date')
+    return today
+
 def fetch_stock_data(ticker):
     """Fetch stock data from Polygon.io API using SMA endpoint."""
-    # Use today's date since it's a trading day
-    end_date = datetime(2025, 7, 8)  # Current system date
-    start_date = end_date - timedelta(days=5)  # Reduced from 30 to 5 days
+    # Get the most recent trading day
+    end_date = get_most_recent_trading_day()
+    start_date = end_date - timedelta(days=30)  # Fetch 30 days of data for better analysis
     
     logging.info(f"Using date range: {start_date.date()} to {end_date.date()}")
     
@@ -128,14 +152,13 @@ def scan_stocks():
     """Scan ETFs for crossover patterns using 8-day and 21-day EMAs."""
     # List of stocks to monitor
     stocks = [
-        # ETFs
-        'SPY', 'QQQ', 'IWM', 'DIA', 'VOO', 'XLF', 'XLE', 'XLK', 'EEM', 'GLD', 'VEA', 'SMH', 'XLV', 'XLI', 'XLP',
-        # Individual Stocks
-        'AAPL', 'ACHR', 'AMD', 'AMZN', 'AVGO', 'BRK.B', 'COIN', 'COKE', 'CPNG', 'CRWD',
-        'GOOGL', 'HIMS', 'HOOD', 'IONQ', 'META', 'MSFT', 'MSTR', 'MU', 'NFLX', 'NOW',
-        'NVDA', 'ORCL', 'PLTR', 'RBLX', 'RKLB', 'RTX', 'SHOP', 'SNOW', 'SOFI',
-        'TSLA', 'TSM', 'VRT'
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'TSM', 'AMD', 'INTC',
+        'NFLX', 'ADBE', 'CSCO', 'QCOM', 'AVGO', 'TXN', 'ORCL', 'CRM', 'IBM', 'UBER',
+        'VRT', 'PLTR', 'SNOW', 'NET', 'CRWD', 'DDOG', 'ZS', 'TEAM', 'OKTA', 'DOCN'
+        ,'RDDT','TEM'
     ]
+    
+    logger.info(f"Starting scan for {len(stocks)} stocks")
     
     # Clear previous results
     all_results.clear()
@@ -160,7 +183,9 @@ def scan_stocks():
             continue
         
         # Process all available data rows
-        ticker_results = []
+        ticker_count = 0
+        logger.info(f"Processing {len(df) - 2} possible data points for {ticker}")
+        
         for i in range(len(df) - 2):  # We need at least 3 consecutive days
             # Get three consecutive days of data
             today = df.iloc[i]
@@ -201,14 +226,18 @@ def scan_stocks():
                 'timestamp': datetime.now()
             }
             
-            ticker_results.append(result)
             all_results.append(result)
+            ticker_count += 1
         
-        print(f"Found {len(ticker_results)} data points for {ticker}")
+        logger.info(f"Added {ticker_count} results for {ticker}")
+        logger.info(f"Current total results: {len(all_results)}")
+
+        
+        print(f"Added {len(df) - 2} data points for {ticker}")
     
-    # Sort results by timestamp in descending order and limit to 20 most recent entries
+    # Sort results by timestamp in descending order
     all_results.sort(key=lambda x: x['date'], reverse=True)
-    return all_results[:20]  # Reduced from 100 to 20 entries
+    return all_results  # Return all results for pagination
 
 @app.route('/')
 def home():
@@ -218,20 +247,37 @@ def home():
     <head>
         <title>Stock Crossover Scanner</title>
         <style>
-            body { font-family: Arial, sans-serif; margin: 20px; }
-            table { border-collapse: collapse; width: 100%; margin-top: 20px; }
-            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
-            th { background-color: #f5f5f5; }
-            .matched { background-color: #90EE90; }
-            .crossover { background-color: pink; }
-            .data-row:hover { background-color: #f5f5f5; }
-            #loading { display: none; margin: 20px 0; }
+            body { font-family: Arial, sans-serif; margin: 20px; background-color: #f8f9fa; }
+            .container { max-width: 1200px; margin: 0 auto; background-color: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+            table { border-collapse: collapse; width: 100%; margin-top: 20px; background-color: white; }
+            th, td { border: 1px solid #ddd; padding: 12px; text-align: left; }
+            th { background-color: #f8f9fa; font-weight: 600; }
+            .matched { background-color: rgba(144, 238, 144, 0.3); }
+            .crossover { background-color: rgba(255, 192, 203, 0.3); }
+            .data-row:hover { background-color: #f8f9fa; }
+            #loading { display: none; margin: 20px 0; color: #666; text-align: center; padding: 20px; }
+            #loading:after { content: ''; display: inline-block; width: 20px; height: 20px; border: 2px solid #666; border-radius: 50%; border-top-color: transparent; animation: spin 1s linear infinite; }
+            @keyframes spin { to { transform: rotate(360deg); } }
+            .no-data { text-align: center; padding: 20px; color: #666; font-style: italic; }
+            #pagination { margin: 20px 0; text-align: center; }
+            #pagination button { padding: 8px 16px; margin: 0 5px; border: 1px solid #ddd; background-color: white; border-radius: 4px; cursor: pointer; }
+            #pagination button:hover { background-color: #f8f9fa; }
+            #pagination button:disabled { background-color: #eee; cursor: not-allowed; }
+            #pageInfo { margin: 0 10px; color: #666; }
+            h1 { color: #333; margin-bottom: 20px; }
         </style>
     </head>
     <body>
-        <h1>Stock Crossover Scanner</h1>
-        <div id="loading">Loading data...</div>
-        <table id="results">
+        <div class="container">
+            <h1>Stock Crossover Scanner</h1>
+        <div id="loading">Loading stock data and calculating crossovers...</div>
+        <div id="stats" style="text-align: center; margin: 10px 0; color: #666;">Total Results: <span id="totalResults">0</span></div>
+            <div id="pagination">
+                <button onclick="previousPage()" id="prevButton" disabled>Previous</button>
+                <span id="pageInfo">Page 1</span>
+                <button onclick="nextPage()" id="nextButton" disabled>Next</button>
+            </div>
+            <table id="results">
             <thead>
                 <tr>
                     <th>Symbol</th>
@@ -256,15 +302,28 @@ def home():
         </table>
 
         <script>
+        let currentPage = 1;
+        let totalPages = 1;
+
         function fetchData() {
             document.getElementById('loading').style.display = 'block';
-            fetch('/scan')
+            fetch(`/scan?page=${currentPage}`)
                 .then(response => response.json())
                 .then(data => {
                     const tbody = document.querySelector('#results tbody');
+                    if (data.total === 0) {
+                        tbody.innerHTML = '<tr><td colspan="10" class="no-data">No data available. Please wait while we fetch the stock data...</td></tr>';
+                        return;
+                    }
                     tbody.innerHTML = '';
+                    totalPages = data.total_pages;
                     
-                    data.forEach(item => {
+                    document.getElementById('pageInfo').textContent = `Page ${currentPage} of ${totalPages}`;
+                    document.getElementById('prevButton').disabled = currentPage <= 1;
+                    document.getElementById('nextButton').disabled = currentPage >= totalPages;
+                    document.getElementById('totalResults').textContent = data.total;
+                    
+                    data.results.forEach(item => {
                         const row = document.createElement('tr');
                         row.className = 'data-row' + (item.matched ? ' matched' : '');
                         
@@ -297,15 +356,32 @@ def home():
                     document.getElementById('loading').style.display = 'none';
                 })
                 .catch(error => {
+                    const tbody = document.querySelector('#results tbody');
+                    tbody.innerHTML = '<tr><td colspan="10" class="no-data">Error loading data. Please try again later.</td></tr>';
                     console.error('Error:', error);
                     document.getElementById('loading').style.display = 'none';
                 });
+        }
+
+        function previousPage() {
+            if (currentPage > 1) {
+                currentPage--;
+                fetchData();
+            }
+        }
+
+        function nextPage() {
+            if (currentPage < totalPages) {
+                currentPage++;
+                fetchData();
+            }
         }
 
         // Fetch data immediately and then every 5 minutes
         fetchData();
         setInterval(fetchData, 300000);
         </script>
+        </div>
     </body>
     </html>
     '''
@@ -313,8 +389,45 @@ def home():
 
 @app.route('/scan')
 def scan():
+    page = request.args.get('page', 1, type=int)
+    per_page = request.args.get('per_page', 20, type=int)
     results = scan_stocks()
-    return jsonify(results)
+    
+    # Calculate pagination
+    total_results = len(results)
+    logger.info(f"Total results before pagination: {total_results}")
+    
+    if total_results == 0:
+        logger.info("No results available")
+        return jsonify({
+            'results': [],
+            'total': 0,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': 0
+        })
+    
+    # Ensure page number is valid
+    total_pages = (total_results + per_page - 1) // per_page
+    page = min(max(1, page), total_pages)
+    
+    # Calculate slice indices
+    start_idx = (page - 1) * per_page
+    end_idx = min(start_idx + per_page, total_results)
+    
+    logger.info(f"Pagination details: page={page}, per_page={per_page}, total_pages={total_pages}")
+    logger.info(f"Returning results from index {start_idx} to {end_idx} (total: {total_results})")
+    
+    paginated_results = results[start_idx:end_idx]
+    logger.info(f"Number of results in current page: {len(paginated_results)}")
+    
+    return jsonify({
+        'results': paginated_results,
+        'total': total_results,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': total_pages
+    })
 
 @app.errorhandler(500)
 def handle_500_error(error):

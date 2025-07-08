@@ -9,7 +9,9 @@ import logging
 import os
 import requests
 from dotenv import load_dotenv
-from firebase_config import db
+
+# Global variable to store results
+all_results = []
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -25,14 +27,17 @@ app = Flask(__name__)
 
 def fetch_stock_data(ticker):
     """Fetch stock data from Polygon.io API using SMA endpoint."""
-    # Get today's date
-    end_date = datetime.now()
-    # Get date 30 days ago
+    # Use the most recent trading day
+    end_date = datetime(2023, 7, 21)  # Recent Friday
     start_date = end_date - timedelta(days=30)
+    
+    logging.info(f"Using date range: {start_date.date()} to {end_date.date()}")
     
     # Format dates as YYYY-MM-DD
     start_date_str = start_date.strftime('%Y-%m-%d')
     end_date_str = end_date.strftime('%Y-%m-%d')
+    
+    logging.info(f"Fetching data for {ticker} from {start_date_str} to {end_date_str}")
     
     max_retries = 3
     retry_wait = 30  # seconds
@@ -69,8 +74,9 @@ def fetch_stock_data(ticker):
 
         # Convert aggregates to DataFrame
         try:
+            # Convert timestamp to Eastern time
             df = pd.DataFrame([{
-                'Date': pd.to_datetime(agg.timestamp, unit='ms').date(),
+                'Date': pd.to_datetime(agg.timestamp, unit='ms').tz_localize('UTC').tz_convert('US/Eastern').date(),
                 'Price': agg.close,
                 'Volume': agg.volume
             } for agg in aggs_data])
@@ -107,38 +113,24 @@ def fetch_stock_data(ticker):
         logging.error(f"Error processing {ticker}: {str(e)}")
         return pd.DataFrame()
 
-def scan_etfs():
+def scan_stocks():
     """Scan ETFs for crossover patterns using 8-day and 21-day EMAs."""
-    # List of popular and actively traded ETFs
-    etfs = [
-        'SPY',   # SPDR S&P 500 ETF Trust
-        'QQQ',   # Invesco QQQ Trust
-        'IWM',   # iShares Russell 2000 ETF
-        'DIA',   # SPDR Dow Jones Industrial Average ETF
-        'VOO',   # Vanguard S&P 500 ETF
-        'XLF',   # Financial Select Sector SPDR Fund
-        'XLE',   # Energy Select Sector SPDR Fund
-        'XLK',   # Technology Select Sector SPDR Fund
-        'EEM',   # iShares MSCI Emerging Markets ETF
-        'GLD',   # SPDR Gold Trust
-        'VEA',   # Vanguard FTSE Developed Markets ETF
-        'SMH',   # VanEck Semiconductor ETF
-        'XLV',   # Health Care Select Sector SPDR Fund
-        'XLI',   # Industrial Select Sector SPDR Fund
-        'XLP'    # Consumer Staples Select Sector SPDR Fund
+    # List of stocks to monitor
+    stocks = [
+        # ETFs
+        'SPY', 'QQQ', 'IWM', 'DIA', 'VOO', 'XLF', 'XLE', 'XLK', 'EEM', 'GLD', 'VEA', 'SMH', 'XLV', 'XLI', 'XLP',
+        # Individual Stocks
+        'AAPL', 'ACHR', 'AMD', 'AMZN', 'AVGO', 'BRK.B', 'COIN', 'COKE', 'CPNG', 'CRWD',
+        'GOOGL', 'HIMS', 'HOOD', 'IONQ', 'META', 'MSFT', 'MSTR', 'MU', 'NFLX', 'NOW',
+        'NVDA', 'ORCL', 'PLTR', 'RBLX', 'RKLB', 'RTX', 'SHOP', 'SNOW', 'SOFI',
+        'TSLA', 'TSM', 'VRT'
     ]
     
-    # Get reference to ETF data collection
-    etf_collection = db.collection('etf_data')
+    # Clear previous results
+    all_results.clear()
     
-    for i, ticker in enumerate(etfs):
+    for i, ticker in enumerate(stocks):
         print(f"\nProcessing {ticker}...")
-        
-        # Add delay between each request to respect rate limits
-        if i > 0:  # Wait after first request
-            delay = 30  # 30 seconds delay between requests
-            print(f"Rate limit pause: waiting {delay} seconds...")
-            time.sleep(delay)
         
         # Try up to 3 times with exponential backoff
         for attempt in range(3):
@@ -198,21 +190,14 @@ def scan_etfs():
                 'timestamp': datetime.now()
             }
             
-            # Store result in Firestore
-            doc_ref = etf_collection.document(f"{ticker}_{today['Date'].strftime('%Y-%m-%d')}")
-            doc_ref.set(result)
-            
             ticker_results.append(result)
+            all_results.append(result)
         
         print(f"Found {len(ticker_results)} data points for {ticker}")
     
-    # Return all results from Firestore
-    all_results = []
-    docs = etf_collection.order_by('timestamp', direction=firestore.Query.DESCENDING).limit(100).stream()
-    for doc in docs:
-        all_results.append(doc.to_dict())
-    
-    return all_results
+    # Sort results by timestamp in descending order and limit to 100
+    all_results.sort(key=lambda x: x['timestamp'], reverse=True)
+    return all_results[:100]
 
 @app.route('/')
 def home():
@@ -220,7 +205,7 @@ def home():
     <!DOCTYPE html>
     <html>
     <head>
-        <title>ETF Crossover Scanner</title>
+        <title>Stock Crossover Scanner</title>
         <style>
             body { font-family: Arial, sans-serif; margin: 20px; }
             table { border-collapse: collapse; width: 100%; margin-top: 20px; }
@@ -233,7 +218,7 @@ def home():
         </style>
     </head>
     <body>
-        <h1>ETF Crossover Scanner</h1>
+        <h1>Stock Crossover Scanner</h1>
         <div id="loading">Loading data...</div>
         <table id="results">
             <thead>
@@ -317,7 +302,7 @@ def home():
 
 @app.route('/scan')
 def scan():
-    results = scan_etfs()
+    results = scan_stocks()
     return jsonify(results)
 
 if __name__ == '__main__':

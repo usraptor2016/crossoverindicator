@@ -10,18 +10,34 @@ import os
 import requests
 from dotenv import load_dotenv
 
+# Load environment variables
+load_dotenv()
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
+
 # Global variable to store results
 all_results = []
 
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-
 # Polygon.io API key
-API_KEY = os.getenv('POLYGON_API_KEY', 'Jr2cmNAEts41lLiOIKVx0YgLo494ow67')
-logging.info(f'Using API key: {API_KEY}')
+API_KEY = os.getenv('POLYGON_API_KEY')
+if not API_KEY:
+    logger.error('POLYGON_API_KEY environment variable is not set')
+    raise ValueError('POLYGON_API_KEY environment variable is required')
+
+logger.info('API key configured successfully')
 
 # Initialize Polygon.io client
-client = RESTClient(API_KEY)
+try:
+    client = RESTClient(API_KEY)
+    logger.info('Polygon.io client initialized successfully')
+except Exception as e:
+    logger.error(f'Failed to initialize Polygon.io client: {str(e)}')
+    raise
 
 app = Flask(__name__)
 
@@ -305,6 +321,21 @@ def scan():
     results = scan_stocks()
     return jsonify(results)
 
+@app.errorhandler(500)
+def handle_500_error(error):
+    logger.error(f'Internal Server Error: {error}')
+    return jsonify({'error': 'Internal Server Error', 'message': str(error)}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(error):
+    logger.error(f'Unhandled Exception: {error}')
+    return jsonify({'error': 'Server Error', 'message': str(error)}), 500
+
 if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 8080))
-    app.run(host='0.0.0.0', port=port)
+    try:
+        port = int(os.environ.get('PORT', 8080))
+        logger.info(f'Starting server on port {port}')
+        app.run(host='0.0.0.0', port=port, debug=False)
+    except Exception as e:
+        logger.error(f'Failed to start server: {str(e)}')
+        raise

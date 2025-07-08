@@ -1,5 +1,5 @@
-Flask==2.0.1
-Werkzeug==2.0.3
+Flask==2.3.3
+Werkzeug==2.3.7
 numpy==1.23.5
 pandas==1.5.3
 polygon-api-client==1.12.3

@@ -10,9 +10,6 @@ import os
 import requests
 from dotenv import load_dotenv
 
-# Load environment variables
-load_dotenv()
-
 # Configure logging
 logging.basicConfig(
     level=logging.INFO,
@@ -23,11 +20,9 @@ logger = logging.getLogger(__name__)
 # Global variable to store results
 all_results = []
 
-# Polygon.io API key
-API_KEY = os.getenv('POLYGON_API_KEY')
-if not API_KEY:
-    logger.error('POLYGON_API_KEY environment variable is not set')
-    raise ValueError('POLYGON_API_KEY environment variable is required')
+# Polygon.io API key (hardcoded)
+# Get a free API key from https://polygon.io/
+API_KEY = 'Jr2cmNAEts41lLiOIKVx0YgLo494ow67'  # Replace with your actual Polygon.io API key
 
 logger.info('API key configured successfully')
 

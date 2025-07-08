@@ -64,7 +64,7 @@ def fetch_stock_data(ticker):
     """Fetch stock data from Polygon.io API using SMA endpoint."""
     # Get the most recent trading day
     end_date = get_most_recent_trading_day()
-    start_date = end_date - timedelta(days=30)  # Fetch 30 days of data for better analysis
+    start_date = end_date - timedelta(days=10)  # Fetch 30 days of data for better analysis
     
     logging.info(f"Using date range: {start_date.date()} to {end_date.date()}")
     

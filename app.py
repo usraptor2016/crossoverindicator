@@ -185,10 +185,10 @@ def scan_stocks():
     """Scan ETFs for crossover patterns using 8-day and 21-day EMAs."""
     # List of stocks to monitor
     stocks = [
-        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'META', 'TSLA', 'TSM', 'AMD', 'INTC',
+        'AAPL', 'MSFT', 'GOOGL', 'AMZN', 'NVDA', 'TEM', 'META', 'TSLA', 'TSM', 'AMD', 'INTC',
         'NFLX', 'ADBE', 'CSCO', 'QCOM', 'AVGO', 'TXN', 'ORCL', 'CRM', 'IBM', 'UBER',
         'VRT', 'PLTR', 'SNOW', 'NET', 'CRWD', 'DDOG', 'ZS', 'TEAM', 'OKTA', 'DOCN'
-        ,'RDDT','TEM'
+        ,'RDDT'
     ]
     
     logger.info(f"Starting scan for {len(stocks)} stocks")
